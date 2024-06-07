@@ -1,7 +1,7 @@
 import yaml
 
 # ROS
-import rospy
+import rclpy
 from geometry_msgs.msg import Twist
 from sensor_msgs.msg import Joy
 from std_msgs.msg import Bool
@@ -22,15 +22,15 @@ DEADMAN_SWITCH = joy_config["deadman_switch"] # button index
 LIN_VEL_BUTTON = joy_config["lin_vel_button"]
 ANG_VEL_BUTTON = joy_config["ang_vel_button"]
 RATE = 9
-vel_pub = rospy.Publisher(VEL_TOPIC, Twist, queue_size=1)
-bumper_pub = rospy.Publisher(JOY_BUMPER_TOPIC, Bool, queue_size=1)
+
+vel_pub = None
 button = None
 bumper = False
 
 
 def callback_joy(data: Joy):
 	"""Callback function for the joystick subscriber"""
-	global vel_msg, button, bumper
+	global vel_msg, button, bumper, vel_pub
 	button = data.buttons[DEADMAN_SWITCH] 
 	bumper_button = data.buttons[DEADMAN_SWITCH - 1]
 	if button is not None: # hold down the dead-man switch to teleop the robot
@@ -47,11 +47,14 @@ def callback_joy(data: Joy):
 
 
 def main():
-	rospy.init_node("Joy2Locobot", anonymous=False)
-	joy_sub = rospy.Subscriber("joy", Joy, callback_joy)
-	rate = rospy.Rate(RATE)	
+	rclpy.init()
+	node = rclpy.create_node("Joy2Locobot")
+	vel_pub = node.create_publisher(Twist, VEL_TOPIC, 1)
+	bumper_pub = node.create_publisher(Bool, JOY_BUMPER_TOPIC, 1)
+	joy_sub = node.create_subscription(Joy, "joy", callback_joy)
+	rate = node.create_rate(RATE)	
 	print("Registered with master node. Waiting for joystick input...")
-	while not rospy.is_shutdown():
+	while rclpy.ok():
 		if button:
 			print(f"Teleoperating the robot:\n {vel_msg}")
 			vel_pub.publish(vel_msg)

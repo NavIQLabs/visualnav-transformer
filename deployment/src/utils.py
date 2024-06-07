@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 
 # ROS
 from sensor_msgs.msg import Image
+from cv_bridge import CvBridge, CvBridgeError
 
 # pytorch
 import torch
@@ -16,6 +17,7 @@ import torchvision.transforms.functional as TF
 import numpy as np
 from PIL import Image as PILImage
 from typing import List, Tuple, Dict, Optional
+import cv2
 
 # models
 from vint_train.models.gnm.gnm import GNM
@@ -111,11 +113,11 @@ def load_model(
     return model
 
 
-def msg_to_pil(msg: Image) -> PILImage.Image:
-    img = np.frombuffer(msg.data, dtype=np.uint8).reshape(
-        msg.height, msg.width, -1)
-    pil_image = PILImage.fromarray(img)
-    return pil_image
+# def msg_to_pil(msg: Image) -> PILImage.Image:
+#     img = np.frombuffer(msg.data, dtype=np.uint8).reshape(
+#         msg.height, msg.width, -1)
+#     pil_image = PILImage.fromarray(img)
+#     return pil_image
 
 
 def pil_to_msg(pil_img: PILImage.Image, encoding="mono8") -> Image:
@@ -130,6 +132,29 @@ def pil_to_msg(pil_img: PILImage.Image, encoding="mono8") -> Image:
 def to_numpy(tensor):
     return tensor.cpu().detach().numpy()
 
+def msg_to_pil(ros_image):
+    bridge = CvBridge()
+    try:
+        # Convert to OpenCV image
+        cv_image = bridge.imgmsg_to_cv2(img_msg=ros_image, desired_encoding='passthrough')
+        # Convert the color space if necessary
+        if ros_image.encoding == 'rgb8':
+            pass  # Already in RGB format
+        elif ros_image.encoding == 'bgr8':
+            cv_image = cv2.cvtColor(cv_image, cv2.COLOR_BGR2RGB)
+        elif ros_image.encoding == 'mono8' or ros_image.encoding == '8UC1':
+            cv_image = cv2.cvtColor(cv_image, cv2.COLOR_GRAY2RGB)
+        elif ros_image.encoding == 'yuv422_yuy2':
+            cv_image = cv2.cvtColor(cv_image, cv2.COLOR_YUV2RGB_YUY2)
+        else:
+            raise ValueError(f"Unsupported encoding {ros_image.encoding}")
+        
+        # Convert OpenCV image to PIL format
+        pil_image = PILImage.fromarray(cv_image)
+        return pil_image
+    except CvBridgeError as e:
+        print(f"Failed to convert image: {e}")
+        return None
 
 def transform_images(pil_imgs: List[PILImage.Image], image_size: List[int], center_crop: bool = False) -> torch.Tensor:
     """Transforms a list of PIL image to a torch tensor."""
