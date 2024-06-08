@@ -6,6 +6,7 @@ import sys
 sys.path.append(f"{os.getcwd()}/src/visualnav-transformer/deployment/src")
 sys.path.append(f"{os.getcwd()}/src/visualnav-transformer/train")
 sys.path.append(f"{os.getcwd()}/src/diffusion_policy")
+
 import threading
 import numpy as np
 import torch
@@ -19,14 +20,16 @@ from std_msgs.msg import Bool, Float32MultiArray
 from .utils import msg_to_pil, to_numpy, transform_images, load_model
 from vint_train.training.train_utils import get_action
 from diffusers.schedulers.scheduling_ddpm import DDPMScheduler
-from topic_names import IMAGE_TOPIC, WAYPOINT_TOPIC, SAMPLED_ACTIONS_TOPIC
+
 os.chdir(f"{os.getcwd()}/src/visualnav-transformer/deployment/src")
+class Args:
+    pass
 
 class ExplorationNode(Node):
-    def __init__(self, args):
+    def __init__(self):
         super().__init__('exploration_node')
-        
-        self.args = args
+
+        self.args = self.load_ros_params()
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.context_queue = []
         self.model, self.model_params = self.load_model_and_params()
@@ -35,19 +38,64 @@ class ExplorationNode(Node):
         self.closest_node = 0
         self.reached_goal = False
 
-        self.create_subscription(Image, IMAGE_TOPIC, self.image_callback, 1)
-        self.waypoint_pub = self.create_publisher(Float32MultiArray, WAYPOINT_TOPIC, 1)
-        self.sampled_actions_pub = self.create_publisher(Float32MultiArray, SAMPLED_ACTIONS_TOPIC, 1)
-        self.goal_pub = self.create_publisher(Bool, "/topoplan/reached_goal", 1)
+        self.create_subscription(Image, self.args.image_topic, self.image_callback, 1)
+        self.waypoint_pub = self.create_publisher(Float32MultiArray, self.args.waypoint_topic, 1)
+        self.sampled_actions_pub = self.create_publisher(Float32MultiArray, self.args.sampled_actions_topic, 1)
+        self.goal_pub = self.create_publisher(Bool, self.args.reached_goal_topic, 1)
         threading.Thread(target=rclpy.spin, args=(self, ), daemon=True).start()
 
-        self.max_v, self.max_w, self.frame_rate = self.load_robot_config() 
-        self.rate = self.create_rate(self.frame_rate)
+        self.rate = self.create_rate(self.args.frame_rate)
 
         self.get_logger().info("Using device: {}".format(self.device))
         self.get_logger().info("Registered with master node. Waiting for image observations...")
         self.navigation()
 
+    def load_ros_params(self):
+        # Declare parameters 
+        self.declare_parameter('image_topic', '/image_raw')
+        self.declare_parameter('waypoint_topic', '/waypoint')
+        self.declare_parameter('sampled_actions_topic', '/sampled_actions')
+        self.declare_parameter('reached_goal_topic', '/topoplan/reached_goal')
+        self.declare_parameter('model', 'nomad')
+        self.declare_parameter('dir', 'topomap')
+        self.declare_parameter('model_config_path', '../config/models.yaml')
+        self.declare_parameter('topomap_images_dir', '../topomaps/images')
+        self.declare_parameter('goal_node', -1)
+        self.declare_parameter('robot_config_path', '../config/robot.yaml')
+        self.declare_parameter('close_threshold', 3)
+        self.declare_parameter('radius', 4)
+        self.declare_parameter('num_samples', 8)
+        self.declare_parameter('waypoint', 2)
+        self.declare_parameter('max_v', 0.2)  # Default value as example
+        self.declare_parameter('max_w', 0.4)  # Default value as example
+        self.declare_parameter('frame_rate', 4)  # Default value as example
+        args = Args()
+        
+        # List all parameters we expect
+        parameters = [ 'image_topic', 'waypoint_topic', 'sampled_actions_topic', 'reached_goal_topic',
+            'model', 'dir', 'model_config_path', 'topomap_images_dir', 
+            'goal_node', 'robot_config_path', 'close_threshold', 'radius', 
+            'num_samples', 'waypoint', 'max_v', 'max_w', 'frame_rate'
+        ]
+        
+        # Load each parameter and assign it to the args object
+        for param_name in parameters:
+            # Assuming all parameters have been declared before this function is called
+            param = self.get_parameter(param_name)
+            param_value = param.get_parameter_value()
+
+            # Check the type of the parameter and convert if necessary
+            print(param_name,"-----", param_value.type)
+            if param_value.type == 2:
+                value = param_value.integer_value
+            elif param_value.type == 3:
+                value = param_value.double_value
+            else:
+                value = param_value.string_value
+            setattr(args, param_name, value)
+
+        return args
+        
     def load_model_and_params(self):
         with open(self.args.model_config_path, "r") as f:
             model_paths = yaml.safe_load(f)
@@ -64,13 +112,6 @@ class ExplorationNode(Node):
 
         return model, model_params
     
-    def load_robot_config(self):
-        with open(self.args.robot_config_path, "r") as f:
-            robot_config = yaml.safe_load(f)
-        max_v = robot_config["max_v"]
-        max_w = robot_config["max_w"]
-        rate = robot_config["frame_rate"] 
-        return max_v, max_w, rate
 
     def load_topomap(self):
         topomap_dir = os.path.join(self.args.topomap_images_dir, self.args.dir)
@@ -193,7 +234,7 @@ class ExplorationNode(Node):
                         sg_img = self.topomap[start + min(self.closest_node + 1, len(waypoints) - 1)]     
             # RECOVERY MODE
             if self.model_params["normalize"]:
-                chosen_waypoint[:2] *= (self.max_v / self.frame_rate)  
+                chosen_waypoint[:2] *= (self.args.max_v / self.args.frame_rate)  
             waypoint_msg = Float32MultiArray()
             print("chosen waypoint:", chosen_waypoint)
             waypoint_msg.data = chosen_waypoint.tolist()
@@ -216,28 +257,14 @@ class ExplorationNode(Node):
             self.rate.sleep()
 
 def main(args=None):
-    parser = argparse.ArgumentParser(description="Code to run GNM DIFFUSION EXPLORATION on the locobot")
-    parser.add_argument("--model", type=str, default="nomad", help="Model name (default: nomad)")
-    parser.add_argument("--dir", type=str, default="topomap", help="Path to topomap images")
-    parser.add_argument("--model_config_path", type=str, default="../config/models.yaml", help="Path to the model config file")
-    parser.add_argument("--topomap_images_dir", type=str, default="../topomaps/images", help="Directory path to topomap images")
-    parser.add_argument("--goal_node", type=int, default=-1, help="Goal node index in the topomap (default: -1, which implies the last node)")
-    parser.add_argument("--robot_config_path", type=str, default="../config/robot.yaml", help="directory path to robot config")
-    parser.add_argument("--close-threshold", "-t", default=3, type=int, help="temporal distance within the next node in the topomap before  localizing to it (default: 3)")
-    parser.add_argument("--radius", "-r", default=4, type=int, help="temporal number of locobal nodes to look at in the topopmap for localization (default: 4)")
-    parser.add_argument("--num-samples", "-n", default=8, type=int, help=f"Number of actions sampled from the exploration model (default: 8)")
-    parser.add_argument("--waypoint", "-w", default=2, type=int, help=f"index of the waypoint used for navigation (between 0 and 4 or  how many waypoints your model predicts) (default: 2); Note close waypoints exihibit straight line motion (the middle waypoint is a good default)")
-    args = parser.parse_args(args)
 
-    if args is None:
-        args = sys.argv[1:]
     rclpy.init()
-    node = ExplorationNode(args)
+    node = ExplorationNode()
     try:
         node.run()
     finally:
         node.destroy_node()
         rclpy.shutdown()
 
-if __name__ == "__main__":
-    main(args=sys.argv[1:])
+if __name__ == '__main__':
+    main()

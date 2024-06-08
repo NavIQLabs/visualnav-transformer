@@ -1,0 +1,12 @@
+explore_node:
+  ros__parameters:
+    model: "nomad"
+    dir: "topomap"
+    model_config_path: "../config/models.yaml"
+    topomap_images_dir: "../topomaps/images"
+    goal_node: -1
+    robot_config_path: "../config/robot.yaml"
+    close_threshold: 3
+    radius: 4
+    num_samples: 8
+    waypoint: 2

@@ -1,0 +1,5 @@
+
+image_topic: "/image_raw"
+waypoint_topic: "/waypoint111"
+sampled_actions_topic: "/sampled_actions"
+reached_goal_topic: "/topoplan/reached_goal"

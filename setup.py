@@ -13,6 +13,8 @@ setup(
             ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
         (os.path.join('share', package_name), glob('deployment/launch/*.launch.py')),
+        (os.path.join('share', package_name, 'config'), glob('deployment/config/*.yaml')),
+        (os.path.join('share', package_name, 'params'), glob('deployment/params/*.yaml')),
 
     ],
     install_requires=['setuptools'],
@@ -25,7 +27,6 @@ setup(
     entry_points={
         'console_scripts': [
             'navigate = deployment.src.navigate:main',
-            'joy_teleop = deployment.src.joy_teleop:main',
             'explore = deployment.src.explore:main',
             'pd_controller = deployment.src.pd_controller:main'
         ],

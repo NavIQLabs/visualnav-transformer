@@ -16,42 +16,84 @@ from std_msgs.msg import Bool, Float32MultiArray
 from utils import msg_to_pil, to_numpy, transform_images, load_model
 from vint_train.training.train_utils import get_action
 from diffusers.schedulers.scheduling_ddpm import DDPMScheduler
-from topic_names import IMAGE_TOPIC, WAYPOINT_TOPIC, SAMPLED_ACTIONS_TOPIC
 os.chdir(f"{os.getcwd()}/src/visualnav-transformer/deployment/src")
 
+class Args:
+    pass
+
 class ExplorationNode(Node):
-    def __init__(self, args):
+    def __init__(self):
         super().__init__("exploration_node")
-        self.args = args
-        self.robot_config, self.model_config, self.model_paths = self.load_configurations()
+        
+
+        self.args = self.load_ros_params()
+        self.model_config, self.model_paths = self.load_configurations()
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.context_queue = []
         self.load_model()
 
-        self.image_subscriber = self.create_subscription(Image, IMAGE_TOPIC, self.callback_obs, 1)
-        self.waypoint_publisher = self.create_publisher(Float32MultiArray, WAYPOINT_TOPIC, 1)
-        self.actions_publisher = self.create_publisher(Float32MultiArray, SAMPLED_ACTIONS_TOPIC, 1)
-        self.rate = self.create_rate(self.robot_config["frame_rate"])
+        self.image_subscriber = self.create_subscription(Image, self.args.image_topic, self.callback_obs, 1)
+        self.waypoint_publisher = self.create_publisher(Float32MultiArray, self.args.waypoint_topic, 1)
+        self.actions_publisher = self.create_publisher(Float32MultiArray, self.args.sampled_actions_topic, 1)
+        self.rate = self.create_rate(self.args.frame_rate)
 
         threading.Thread(target=rclpy.spin, args=(self, ), daemon=True).start()
         
         self.get_logger().info(f"Using device: {self.device}")
         self.get_logger().info("Node initialized and waiting for image observations...")
 
-    def load_configurations(self):
-        with open("../config/robot.yaml", "r") as f:
-            robot_config = yaml.safe_load(f)
+    def load_ros_params(self):
+        # Declare parameters 
+        self.declare_parameter('image_topic', '/image_raw')
+        self.declare_parameter('waypoint_topic', '/waypoint')
+        self.declare_parameter('sampled_actions_topic', '/sampled_actions')
+        self.declare_parameter('model', 'nomad')
+        self.declare_parameter('model_config_path', '../config/models.yaml')
+        self.declare_parameter('goal_node', -1)
+        self.declare_parameter('robot_config_path', '../config/robot.yaml')
+        self.declare_parameter('num_samples', 8)
+        self.declare_parameter('waypoint', 2)
+        self.declare_parameter('max_v', 0.2)  # Default value as example
+        self.declare_parameter('max_w', 0.4)  # Default value as example
+        self.declare_parameter('frame_rate', 4)  # Default value as example
+        args = Args()
+        
+        # List all parameters we expect
+        parameters = [ 'image_topic', 'waypoint_topic', 'sampled_actions_topic',
+            'model', 'model_config_path', 
+            'goal_node', 'robot_config_path',
+            'num_samples', 'waypoint', 'max_v', 'max_w', 'frame_rate'
+        ]
+        
+        # Load each parameter and assign it to the args object
+        for param_name in parameters:
+            print(param_name)
+            # Assuming all parameters have been declared before this function is called
+            param = self.get_parameter(param_name)
+            param_value = param.get_parameter_value()
 
-        with open("../config/models.yaml", "r") as f:
+            # Check the type of the parameter and convert if necessary
+            if param_value.type == 2:
+                value = param_value.integer_value
+            elif param_value.type == 3:
+                value = param_value.double_value
+            else:
+                value = param_value.string_value
+            setattr(args, param_name, value)
+
+        return args
+
+    def load_configurations(self):
+        with open(self.args.model_config_path, "r") as f:
             model_paths = yaml.safe_load(f)
-        model_config_path = model_paths[args.model]["config_path"]
+        model_config_path = model_paths[self.args.model]["config_path"]
         with open(model_config_path, "r") as f:
             model_config = yaml.safe_load(f)
 
-        return robot_config, model_config, model_paths
+        return model_config, model_paths
 
     def load_model(self):
-        ckpt_path = self.model_paths[args.model]["ckpt_path"]
+        ckpt_path = self.model_paths[self.args.model]["ckpt_path"]
         if os.path.exists(ckpt_path):
             self.get_logger().info(f"Loading model from {ckpt_path}")
             self.model = load_model(ckpt_path, self.model_config, self.device)
@@ -94,9 +136,9 @@ class ExplorationNode(Node):
     def infer_action(self, obs_cond):
         # (B, obs_horizon * obs_dim)
         if len(obs_cond.shape) == 2:
-            obs_cond = obs_cond.repeat(args.num_samples, 1)
+            obs_cond = obs_cond.repeat(self.args.num_samples, 1)
         else:
-            obs_cond = obs_cond.repeat(args.num_samples, 1, 1)
+            obs_cond = obs_cond.repeat(self.args.num_samples, 1, 1)
 
         naction = torch.randn((self.args.num_samples, self.model_config["len_traj_pred"], 2), device=self.device)
         self.noise_scheduler.set_timesteps(self.model_config["num_diffusion_iters"])
@@ -117,15 +159,15 @@ class ExplorationNode(Node):
         chosen_waypoint = naction[self.args.waypoint]
 
         if self.model_config["normalize"]:
-            chosen_waypoint *= (self.robot_config["max_v"] / self.robot_config["frame_rate"])
+            chosen_waypoint *= (self.args.max_v / self.args.frame_rate)
         waypoint_msg = Float32MultiArray()
         waypoint_msg.data = chosen_waypoint.tolist()
         self.waypoint_publisher.publish(waypoint_msg)
         print("Published waypoint")
 
-def main(args):
+def main(args = None):
     rclpy.init()
-    exploration_node = ExplorationNode(args)
+    exploration_node = ExplorationNode()
     try:
         exploration_node.run()
     finally:
@@ -133,9 +175,5 @@ def main(args):
         rclpy.shutdown()
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="GNM DIFFUSION EXPLORATION on the locobot")
-    parser.add_argument("--model", default="nomad", help="Model name")
-    parser.add_argument("--waypoint", type=int, default=2, help="Waypoint index")
-    parser.add_argument("--num-samples", type=int, default=8, help="Number of samples")
-    args = parser.parse_args()
-    main(args)
+
+    main()
