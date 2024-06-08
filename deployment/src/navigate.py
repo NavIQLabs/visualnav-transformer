@@ -1,8 +1,13 @@
+#!/usr/bin/env python3
 import argparse
 import os
+import sys
+
+sys.path.append(f"{os.getcwd()}/src/visualnav-transformer/deployment/src")
+sys.path.append(f"{os.getcwd()}/src/visualnav-transformer/train")
+sys.path.append(f"{os.getcwd()}/src/diffusion_policy")
 import threading
 import numpy as np
-os.system('source /home/divyamc/IISC/dl_stack/src/nomad_venv/bin/activate')
 import torch
 from PIL import Image as PILImage
 import time
@@ -11,14 +16,16 @@ import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import Image
 from std_msgs.msg import Bool, Float32MultiArray
-from utils import msg_to_pil, to_numpy, transform_images, load_model
+from .utils import msg_to_pil, to_numpy, transform_images, load_model
 from vint_train.training.train_utils import get_action
 from diffusers.schedulers.scheduling_ddpm import DDPMScheduler
 from topic_names import IMAGE_TOPIC, WAYPOINT_TOPIC, SAMPLED_ACTIONS_TOPIC
+os.chdir(f"{os.getcwd()}/src/visualnav-transformer/deployment/src")
 
 class ExplorationNode(Node):
     def __init__(self, args):
         super().__init__('exploration_node')
+        
         self.args = args
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.context_queue = []
@@ -100,8 +107,8 @@ class ExplorationNode(Node):
                     obs_images = obs_images.to(self.device)
                     mask = torch.zeros(1).long().to(self.device)  
 
-                    start = max(self.closest_node - args.radius, 0)
-                    end = min(self.closest_node + args.radius + 1, self.goal_node)
+                    start = max(self.closest_node - self.args.radius, 0)
+                    end = min(self.closest_node + self.args.radius + 1, self.goal_node)
                     goal_image = [transform_images(g_img, self.model_params["image_size"], center_crop=False).to(self.device) for g_img in self.topomap[start:end + 1]]
                     goal_image = torch.concat(goal_image, dim=0)
 
@@ -111,20 +118,20 @@ class ExplorationNode(Node):
                     min_idx = np.argmin(dists)
                     self.closest_node = min_idx + start
                     print("closest node:", self.closest_node)
-                    sg_idx = min(min_idx + int(dists[min_idx] < args.close_threshold), len(obsgoal_cond) - 1)
+                    sg_idx = min(min_idx + int(dists[min_idx] < self.args.close_threshold), len(obsgoal_cond) - 1)
                     obs_cond = obsgoal_cond[sg_idx].unsqueeze(0)
 
                     # infer action
                     with torch.no_grad():
                         # encoder vision features
                         if len(obs_cond.shape) == 2:
-                            obs_cond = obs_cond.repeat(args.num_samples, 1)
+                            obs_cond = obs_cond.repeat(self.args.num_samples, 1)
                         else:
-                            obs_cond = obs_cond.repeat(args.num_samples, 1, 1)
+                            obs_cond = obs_cond.repeat(self.args.num_samples, 1, 1)
                         
                         # initialize action from Gaussian noise
                         noisy_action = torch.randn(
-                            (args.num_samples, self.model_params["len_traj_pred"], 2), device=self.device)
+                            (self.args.num_samples, self.model_params["len_traj_pred"], 2), device=self.device)
                         naction = noisy_action
 
                         # init scheduler
@@ -153,10 +160,10 @@ class ExplorationNode(Node):
                     print("published sampled actions")
                     self.sampled_actions_pub.publish(sampled_actions_msg)
                     naction = naction[0] 
-                    chosen_waypoint = naction[args.waypoint]
+                    chosen_waypoint = naction[self.args.waypoint]
                 elif (len(self.context_queue) > self.model_params["context_size"]):
-                    start = max(self.closest_node - args.radius, 0)
-                    end = min(self.closest_node + args.radius + 1, self.goal_node)
+                    start = max(self.closest_node - self.args.radius, 0)
+                    end = min(self.closest_node + self.args.radius + 1, self.goal_node)
                     distances = []
                     waypoints = []
                     batch_obs_imgs = []
@@ -177,12 +184,12 @@ class ExplorationNode(Node):
                     # look for closest node
                     self.closest_node = np.argmin(distances)
                     # chose subgoal and output waypoints
-                    if distances[self.closest_node] > args.close_threshold:
-                        chosen_waypoint = waypoints[self.closest_node][args.waypoint]
+                    if distances[self.closest_node] > self.args.close_threshold:
+                        chosen_waypoint = waypoints[self.closest_node][self.args.waypoint]
                         sg_img = self.topomap[start + self.closest_node]
                     else:
                         chosen_waypoint = waypoints[min(
-                            self.closest_node + 1, len(waypoints) - 1)][args.waypoint]
+                            self.closest_node + 1, len(waypoints) - 1)][self.args.waypoint]
                         sg_img = self.topomap[start + min(self.closest_node + 1, len(waypoints) - 1)]     
             # RECOVERY MODE
             if self.model_params["normalize"]:
@@ -208,16 +215,7 @@ class ExplorationNode(Node):
                 break
             self.rate.sleep()
 
-def main(args):
-    rclpy.init()
-    node = ExplorationNode(args)
-    try:
-        node.run()
-    finally:
-        node.destroy_node()
-        rclpy.shutdown()
-
-if __name__ == "__main__":
+def main(args=None):
     parser = argparse.ArgumentParser(description="Code to run GNM DIFFUSION EXPLORATION on the locobot")
     parser.add_argument("--model", type=str, default="nomad", help="Model name (default: nomad)")
     parser.add_argument("--dir", type=str, default="topomap", help="Path to topomap images")
@@ -229,5 +227,17 @@ if __name__ == "__main__":
     parser.add_argument("--radius", "-r", default=4, type=int, help="temporal number of locobal nodes to look at in the topopmap for localization (default: 4)")
     parser.add_argument("--num-samples", "-n", default=8, type=int, help=f"Number of actions sampled from the exploration model (default: 8)")
     parser.add_argument("--waypoint", "-w", default=2, type=int, help=f"index of the waypoint used for navigation (between 0 and 4 or  how many waypoints your model predicts) (default: 2); Note close waypoints exihibit straight line motion (the middle waypoint is a good default)")
-    args = parser.parse_args()
-    main(args)
+    args = parser.parse_args(args)
+
+    if args is None:
+        args = sys.argv[1:]
+    rclpy.init()
+    node = ExplorationNode(args)
+    try:
+        node.run()
+    finally:
+        node.destroy_node()
+        rclpy.shutdown()
+
+if __name__ == "__main__":
+    main(args=sys.argv[1:])

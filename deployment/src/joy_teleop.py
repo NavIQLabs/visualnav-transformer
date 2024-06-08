@@ -1,4 +1,9 @@
 import yaml
+import os
+import sys
+sys.path.append(f"{os.getcwd()}/src/visualnav-transformer/deployment/src")
+sys.path.append(f"{os.getcwd()}/src/visualnav-transformer/train")
+sys.path.append(f"{os.getcwd()}/src/diffusion_policy")
 
 # ROS
 import rclpy
@@ -7,6 +12,7 @@ from sensor_msgs.msg import Joy
 from std_msgs.msg import Bool
 
 from topic_names import JOY_BUMPER_TOPIC
+os.chdir(f"{os.getcwd()}/src/visualnav-transformer/deployment/src")
 
 vel_msg = Twist()
 CONFIG_PATH = "../config/robot.yaml"

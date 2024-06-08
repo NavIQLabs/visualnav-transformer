@@ -1,5 +1,9 @@
 import argparse
 import os
+import sys
+sys.path.append(f"{os.getcwd()}/src/visualnav-transformer/deployment/src")
+sys.path.append(f"{os.getcwd()}/src/visualnav-transformer/train")
+sys.path.append(f"{os.getcwd()}/src/diffusion_policy")
 import threading
 import numpy as np
 import torch
@@ -13,6 +17,7 @@ from utils import msg_to_pil, to_numpy, transform_images, load_model
 from vint_train.training.train_utils import get_action
 from diffusers.schedulers.scheduling_ddpm import DDPMScheduler
 from topic_names import IMAGE_TOPIC, WAYPOINT_TOPIC, SAMPLED_ACTIONS_TOPIC
+os.chdir(f"{os.getcwd()}/src/visualnav-transformer/deployment/src")
 
 class ExplorationNode(Node):
     def __init__(self, args):

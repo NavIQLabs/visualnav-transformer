@@ -1,5 +1,9 @@
 import argparse
 import os
+import sys
+sys.path.append(f"{os.getcwd()}/src/visualnav-transformer/deployment/src")
+sys.path.append(f"{os.getcwd()}/src/visualnav-transformer/train")
+sys.path.append(f"{os.getcwd()}/src/diffusion_policy")
 import shutil
 import time
 from utils import msg_to_pil
@@ -7,6 +11,7 @@ import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import Image, Joy
 import threading
+os.chdir(f"{os.getcwd()}/src/visualnav-transformer/deployment/src")
 
 IMAGE_TOPIC = "/image_raw"
 TOPOMAP_IMAGES_DIR = "../topomaps/images"

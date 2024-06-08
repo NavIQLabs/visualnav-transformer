@@ -1,3 +1,8 @@
+import sys
+import os
+sys.path.append(f"{os.getcwd()}/src/visualnav-transformer/deployment/src")
+sys.path.append(f"{os.getcwd()}/src/visualnav-transformer/train")
+sys.path.append(f"{os.getcwd()}/src/diffusion_policy")
 import numpy as np
 import yaml
 import threading
@@ -8,6 +13,7 @@ from std_msgs.msg import Float32MultiArray, Bool
 from topic_names import WAYPOINT_TOPIC, REACHED_GOAL_TOPIC
 from ros_data import ROSData
 from utils import clip_angle
+os.chdir(f"{os.getcwd()}/src/visualnav-transformer/deployment/src")
 
 class PDControllerNode(Node):
     def __init__(self):
