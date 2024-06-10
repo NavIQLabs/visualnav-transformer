@@ -28,7 +28,8 @@ setup(
         'console_scripts': [
             'navigate = deployment.src.navigate:main',
             'explore = deployment.src.explore:main',
-            'pd_controller = deployment.src.pd_controller:main'
+            'pd_controller = deployment.src.pd_controller:main',
+            'create_topomap = deployment.src.create_topomap:main',
         ],
     },
 )

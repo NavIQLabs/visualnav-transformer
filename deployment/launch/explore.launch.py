@@ -14,7 +14,7 @@ def load_yaml_file(filepath):
 def generate_launch_description():
     package_dir = get_package_share_directory('visualnav_transformer')
 
-    params_file = os.path.join(package_dir, 'params', 'navigation.yaml')
+    params_file = os.path.join(package_dir, 'params', 'explore.yaml')
     topics_file = os.path.join(package_dir, 'params', 'topics.yaml')
     robot_file = os.path.join(package_dir, 'params', 'robot.yaml')
 
@@ -33,7 +33,7 @@ def generate_launch_description():
             package='visualnav_transformer',
             executable='pd_controller',
             name='pd_controller_node',
-            parameters=[params_file, topics, robot_params],
+            parameters=[topics, robot_params],
             output='screen'
         )
     ])

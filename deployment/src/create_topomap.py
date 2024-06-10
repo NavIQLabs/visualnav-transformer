@@ -12,18 +12,17 @@ from rclpy.node import Node
 from sensor_msgs.msg import Image, Joy
 import threading
 os.chdir(f"{os.getcwd()}/src/visualnav-transformer/deployment/src")
-
-IMAGE_TOPIC = "/image_raw"
-TOPOMAP_IMAGES_DIR = "../topomaps/images"
+class Args:
+    pass
 
 class TopoMapCreator(Node):
-    def __init__(self, args):
+    def __init__(self):
         super().__init__("create_topomap")
-        self.args = args
+        self.args = self.load_ros_params()
         self.obs_img = None
         self.publisher = self.create_publisher(Image, "/subgoals", 1)
         self.image_subscriber = self.create_subscription(
-            Image, IMAGE_TOPIC, self.callback_obs, 1)
+            Image, self.args.image_topic, self.callback_obs, 1)
         self.joy_subscriber = self.create_subscription(
             Joy, "joy", self.callback_joy, 1)
         self.init_directories()
@@ -36,8 +35,35 @@ class TopoMapCreator(Node):
         thread = threading.Thread(target=rclpy.spin, args=(self, ), daemon=True)
         thread.start()
 
+    def load_ros_params(self):
+        self.declare_parameter("dt", 1.0)
+        self.declare_parameter("dir", "topomap")
+        self.declare_parameter("image_topic", "/image_raw")
+        self.declare_parameter("topomap_images_dir", "../topomaps/images")
+        
+        args = Args()
+        parameters = [ "dt", "dir", "image_topic", "topomap_images_dir"]        
+        # Load each parameter and assign it to the args object
+        for param_name in parameters:
+            print(param_name)
+            # Assuming all parameters have been declared before this function is called
+            param = self.get_parameter(param_name)
+            param_value = param.get_parameter_value()
+
+            # Check the type of the parameter and convert if necessary
+            if param_value.type == 2:
+                value = param_value.integer_value
+            elif param_value.type == 3:
+                value = param_value.double_value
+            else:
+                value = param_value.string_value
+            setattr(args, param_name, value)
+
+        return args
+
+
     def init_directories(self):
-        topomap_name_dir = os.path.join(TOPOMAP_IMAGES_DIR, self.args.dir)
+        topomap_name_dir = os.path.join(self.args.topomap_images_dir, self.args.dir)
         if not os.path.isdir(topomap_name_dir):
             os.makedirs(topomap_name_dir)
         else:
@@ -67,7 +93,7 @@ class TopoMapCreator(Node):
     def run(self):
         while rclpy.ok():
             if self.obs_img is not None:
-                img_path = os.path.join(TOPOMAP_IMAGES_DIR, self.args.dir, f"{self.i}.png")
+                img_path = os.path.join(self.args.topomap_images_dir, self.args.dir, f"{self.i}.png")
                 self.obs_img.save(img_path)
                 print(img_path)
                 print("Published image", self.i)
@@ -75,7 +101,7 @@ class TopoMapCreator(Node):
                 self.start_time = time.time()
                 self.obs_img = None
             if time.time() - self.start_time > 2 * self.args.dt:
-                print(f"Topic {IMAGE_TOPIC} not publishing anymore. Shutting down...")
+                print(f"Topic {self.args.image_topic} not publishing anymore. Shutting down...")
                 break
             self.rate.sleep()
 
@@ -83,16 +109,8 @@ class TopoMapCreator(Node):
         rclpy.shutdown()
 
 def main(args=None):
-    parser = argparse.ArgumentParser(
-        description=f"Code to generate topomaps from the {IMAGE_TOPIC} topic")
-    parser.add_argument("--dir", "-d", default="topomap", type=str,
-                        help="path to topological map images in ../topomaps/images directory (default: topomap)")
-    parser.add_argument("--dt", "-t", default=1.0, type=float,
-                        help=f"time between images sampled from the {IMAGE_TOPIC} topic (default: 1.0)")
-    args = parser.parse_args(args)
-
     rclpy.init()
-    topo_map_creator = TopoMapCreator(args)
+    topo_map_creator = TopoMapCreator()
     topo_map_creator.run()
 
 if __name__ == "__main__":
