@@ -340,7 +340,10 @@ class ViNT_Dataset(Dataset):
         else:
             distance = (goal_time - curr_time) // self.waypoint_spacing
             assert (goal_time - curr_time) % self.waypoint_spacing == 0, f"{goal_time} and {curr_time} should be separated by an integer multiple of {self.waypoint_spacing}"
-        
+
+        actions = actions.astype(np.float32)
+        goal_pos = goal_pos.astype(np.float32)
+
         actions_torch = torch.as_tensor(actions, dtype=torch.float32)
         if self.learn_angle:
             actions_torch = calculate_sin_cos(actions_torch)

@@ -1,0 +1,3 @@
+create_topomap_node:
+  ros__parameters:
+    topomap_images_dir: "../topomaps/images"

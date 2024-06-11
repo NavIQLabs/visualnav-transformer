@@ -38,7 +38,6 @@ def generate_launch_description():
     )
 
     mode = sys.argv[-1].split('=')[-1]
-    print(mode)
 
     ld.add_action(topomap_node)
     if mode == 'manual':
@@ -70,48 +69,5 @@ def generate_launch_description():
         ld.add_action(pd_controller_node)
     return ld
     
-
-
-    # if mode. == 'manual':
-    #     return launch.LaunchDescription([
-    #         launch_ros.actions.Node(
-    #             package='visualnav_transformer',
-    #             executable='create_topomap',
-    #             name='create_topomap_node',
-    #             parameters=[topomap_file, topics, robot_params],
-    #             output='screen'
-    #         ),
-    #         launch_ros.actions.Node(
-    #             package='teleop_twist_keyboard',
-    #             executable='teleop_twist_keyboard',
-    #             name='teleop_twist_keyboard_node',
-    #             output='screen'
-    #         )
-    #     ])
-    # else:
-    #     return launch.LaunchDescription([
-    #         launch_ros.actions.Node(
-    #             package='visualnav_transformer',
-    #             executable='create_topomap',
-    #             name='create_topomap_node',
-    #             parameters=[topomap_file, topics, robot_params],
-    #             output='screen'
-    #         ),
-    #         launch_ros.actions.Node(
-    #             package='visualnav_transformer',
-    #             executable='explore',
-    #             name='explore_node',
-    #             parameters=[params_file, topics, robot_params],
-    #             output='screen'
-    #         ),
-    #         launch_ros.actions.Node(
-    #             package='visualnav_transformer',
-    #             executable='pd_controller',
-    #             name='pd_controller_node',
-    #             parameters=[topics, robot_params],
-    #             output='screen'
-    #         )
-    #     ])
-
 if __name__ == '__main__':
     generate_launch_description()
