@@ -8,11 +8,16 @@ import threading
 import numpy as np
 import torch
 from PIL import Image as PILImage
+import cv2
+import cv_bridge
 import yaml
 import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import Image
 from std_msgs.msg import Bool, Float32MultiArray
+from visualization_msgs.msg import MarkerArray, Marker
+from geometry_msgs.msg import Point
+from std_msgs.msg import ColorRGBA
 from utils import msg_to_pil, to_numpy, transform_images, load_model
 from vint_train.training.train_utils import get_action
 from diffusers.schedulers.scheduling_ddpm import DDPMScheduler
@@ -35,6 +40,7 @@ class ExplorationNode(Node):
         self.image_subscriber = self.create_subscription(Image, self.args.image_topic, self.callback_obs, 1)
         self.waypoint_publisher = self.create_publisher(Float32MultiArray, self.args.waypoint_topic, 1)
         self.actions_publisher = self.create_publisher(Float32MultiArray, self.args.sampled_actions_topic, 1)
+        self.actions_vis = self.create_publisher(MarkerArray, self.args.action_vis_topic, 1)
         self.rate = self.create_rate(self.args.frame_rate)
 
         threading.Thread(target=rclpy.spin, args=(self, ), daemon=True).start()
@@ -47,6 +53,7 @@ class ExplorationNode(Node):
         self.declare_parameter('image_topic', '/image_raw')
         self.declare_parameter('waypoint_topic', '/waypoint')
         self.declare_parameter('sampled_actions_topic', '/sampled_actions')
+        self.declare_parameter('action_vis_topic', '/actions_vis')
         self.declare_parameter('model', 'nomad')
         self.declare_parameter('model_config_path', '../config/models.yaml')
         self.declare_parameter('goal_node', -1)
@@ -59,7 +66,7 @@ class ExplorationNode(Node):
         args = Args()
         
         # List all parameters we expect
-        parameters = [ 'image_topic', 'waypoint_topic', 'sampled_actions_topic',
+        parameters = [ 'image_topic', 'waypoint_topic', 'sampled_actions_topic', "action_vis_topic",
             'model', 'model_config_path', 
             'goal_node', 'robot_config_path',
             'num_samples', 'waypoint', 'max_v', 'max_w', 'frame_rate'
@@ -67,7 +74,6 @@ class ExplorationNode(Node):
         
         # Load each parameter and assign it to the args object
         for param_name in parameters:
-            print(param_name)
             # Assuming all parameters have been declared before this function is called
             param = self.get_parameter(param_name)
             param_value = param.get_parameter_value()
@@ -146,6 +152,31 @@ class ExplorationNode(Node):
             noise_pred = self.model('noise_pred_net', sample=naction, timestep=k, global_cond=obs_cond)
             naction = self.noise_scheduler.step(model_output=noise_pred, timestep=k, sample=naction).prev_sample
         return naction
+    
+    def trajectory_vis(self, naction):
+        trajectories = np.cumsum(naction, axis=1) * 0.12
+        marker_array = MarkerArray()
+
+        for i, trajectory in enumerate(trajectories):
+            marker = Marker()
+            marker.header.frame_id = "base_link"
+            marker.type = marker.LINE_STRIP
+            marker.action = marker.ADD
+            marker.id = i
+            marker.scale.x = 0.05  # Line width
+            marker.color = ColorRGBA(r=1.0, g=0.0, b=0.0, a=1.0)  # Red color
+            
+            # Set trajectory points
+            for j, xy in enumerate(trajectory):
+                p = Point()
+                p.x = float(xy[0])
+                p.y = float(xy[1])
+                p.z = 0.0
+                marker.points.append(p)
+            
+            marker_array.markers.append(marker)
+
+        self.actions_vis.publish(marker_array)
 
     def publish_actions(self, naction):
         naction = to_numpy(get_action(naction))
@@ -154,6 +185,7 @@ class ExplorationNode(Node):
         self.actions_publisher.publish(actions_msg)
         self.get_logger().info("Published actions")
 
+        self.trajectory_vis(naction)
         naction = naction[0] # change this based on heuristic
 
         chosen_waypoint = naction[self.args.waypoint]

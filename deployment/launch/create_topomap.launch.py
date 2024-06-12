@@ -5,6 +5,7 @@ from ament_index_python.packages import get_package_share_directory
 
 import launch_ros.actions
 from launch.actions import DeclareLaunchArgument
+from launch.actions import ExecuteProcess
 
 import yaml
 
@@ -41,10 +42,9 @@ def generate_launch_description():
 
     ld.add_action(topomap_node)
     if mode == 'manual':
-        teleop_node = launch_ros.actions.Node(
-            package='teleop_twist_keyboard',
-            executable='teleop_twist_keyboard',
-            name='teleop_twist_keyboard_node',
+        teleop_node = ExecuteProcess(
+            cmd=['gnome-terminal', '--', 'zsh', '-c', 
+                'ros2 run teleop_twist_keyboard teleop_twist_keyboard teleop_twist_keyboard; exec zsh'],
             output='screen'
         )
         ld.add_action(teleop_node)

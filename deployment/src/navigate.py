@@ -16,7 +16,9 @@ import yaml
 import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import Image
-from std_msgs.msg import Bool, Float32MultiArray
+from std_msgs.msg import Bool, Float32MultiArray, ColorRGBA
+from visualization_msgs.msg import MarkerArray, Marker
+from geometry_msgs.msg import Point
 from .utils import msg_to_pil, to_numpy, transform_images, load_model
 from vint_train.training.train_utils import get_action
 from diffusers.schedulers.scheduling_ddpm import DDPMScheduler
@@ -42,6 +44,7 @@ class ExplorationNode(Node):
         self.waypoint_pub = self.create_publisher(Float32MultiArray, self.args.waypoint_topic, 1)
         self.sampled_actions_pub = self.create_publisher(Float32MultiArray, self.args.sampled_actions_topic, 1)
         self.goal_pub = self.create_publisher(Bool, self.args.reached_goal_topic, 1)
+        self.actions_vis = self.create_publisher(MarkerArray, "/actions_vis", 1)
         threading.Thread(target=rclpy.spin, args=(self, ), daemon=True).start()
 
         self.rate = self.create_rate(self.args.frame_rate)
@@ -126,6 +129,33 @@ class ExplorationNode(Node):
             self.context_queue.pop(0)
             self.context_queue.append(obs_img)
 
+    def trajectory_vis(self, naction):
+        trajectories = np.cumsum(naction, axis=1)
+        marker_array = MarkerArray()
+
+
+        for i, trajectory in enumerate(trajectories):
+            marker = Marker()
+            marker.header.frame_id = "base_link"
+            marker.type = marker.LINE_STRIP
+            marker.action = marker.ADD
+            marker.id = i
+            marker.scale.x = 0.05  # Line width
+            marker.color = ColorRGBA(r=1.0, g=0.0, b=0.0, a=1.0)  # Red color
+            
+            # Set trajectory points
+            for j, xy in enumerate(trajectory):
+                p = Point()
+                p.x = float(xy[0])
+                p.y = float(xy[1])
+                p.z = 0.0
+                marker.points.append(p)
+            
+            marker_array.markers.append(marker)
+        
+        self.actions_vis.publish(marker_array)
+
+
     def navigation(self):
         if self.model_params["model_type"] == "nomad":
             num_diffusion_iters = self.model_params["num_diffusion_iters"]
@@ -200,6 +230,8 @@ class ExplorationNode(Node):
                     sampled_actions_msg.data = np.concatenate((np.array([0]), naction.flatten())).tolist()
                     print("published sampled actions")
                     self.sampled_actions_pub.publish(sampled_actions_msg)
+
+                    self.trajectory_vis(naction)
                     naction = naction[0] 
                     chosen_waypoint = naction[self.args.waypoint]
                 elif (len(self.context_queue) > self.model_params["context_size"]):
