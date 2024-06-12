@@ -9,4 +9,4 @@ explore_node:
     close_threshold: 3
     radius: 4
     num_samples: 8
-    waypoint: 2
+    waypoint: 7

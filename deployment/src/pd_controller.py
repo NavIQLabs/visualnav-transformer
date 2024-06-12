@@ -78,7 +78,7 @@ class PDControllerNode(Node):
         w = np.arctan2(dy, dx) / self.args.frame_rate
         v = np.clip(v, -self.args.max_v, self.args.max_v)
         w = np.clip(w, -self.args.max_w, self.args.max_w)
-        return v, w
+        return v/2, w * 5
 
     def callback_drive(self, msg):
         self.waypoint.set(msg.data)

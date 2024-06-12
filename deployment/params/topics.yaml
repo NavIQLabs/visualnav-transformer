@@ -1,5 +1,5 @@
 
-image_topic: "/image_raw"
-waypoint_topic: "/waypoint111"
+image_topic: "/front_stereo_camera/right_rgb/image_raw"
+waypoint_topic: "/waypoint"
 sampled_actions_topic: "/sampled_actions"
 reached_goal_topic: "/topoplan/reached_goal"
