@@ -10,9 +10,13 @@ gnm:
   config_path: "../../train/config/gnm.yaml"
   ckpt_path: "../model_weights/gnm_large.pth"
 
-nomad: 
-  config_path: "../../train/config/nomad.yaml"
-  ckpt_path: "../model_weights/nomad.pth"
+# nomad: 
+#   config_path: "../../train/config/nomad.yaml"
+#   ckpt_path: "../model_weights/nomad.pth"
+
+nomad:
+  config_path: "../../train/config/isaac.yaml"
+  ckpt_path: "/home/user/dlstack_ws/src/visualnav-transformer/train/logs/nomad/nomad_2024_06_14_09_21_23/latest.pth"
 
 
 # add your own model configs here after saving the *.pth file to ../model_weight

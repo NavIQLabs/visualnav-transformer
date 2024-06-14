@@ -130,7 +130,7 @@ class ExplorationNode(Node):
             self.context_queue.append(obs_img)
 
     def trajectory_vis(self, naction):
-        trajectories = np.cumsum(naction, axis=1)
+        trajectories = np.cumsum(naction, axis=1)* 0.12
         marker_array = MarkerArray()
 
 

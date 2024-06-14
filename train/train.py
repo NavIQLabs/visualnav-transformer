@@ -145,6 +145,7 @@ def main(config):
         )
 
     # Create the model
+
     if config["model_type"] == "gnm":
         model = GNM(
             config["context_size"],
@@ -288,6 +289,9 @@ def main(config):
         load_model(model, config["model_type"], latest_checkpoint)
         if "epoch" in latest_checkpoint:
             current_epoch = latest_checkpoint["epoch"] + 1
+    if config["use_ckpt"] == True:
+        checkpoint = torch.load(config["checkpoint_path"])
+        load_model(model, config["model_type"], checkpoint)
 
     # Multi-GPU
     if len(config["gpu_ids"]) > 1:
