@@ -146,6 +146,8 @@ def msg_to_pil(ros_image):
             cv_image = cv2.cvtColor(cv_image, cv2.COLOR_GRAY2RGB)
         elif ros_image.encoding == 'yuv422_yuy2':
             cv_image = cv2.cvtColor(cv_image, cv2.COLOR_YUV2RGB_YUY2)
+        elif ros_image.encoding == 'bgra8':
+            cv_image = cv2.cvtColor(cv_image, cv2.COLOR_BGRA2RGB)
         else:
             raise ValueError(f"Unsupported encoding {ros_image.encoding}")
         
