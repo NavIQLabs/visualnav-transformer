@@ -19,10 +19,9 @@ This repository contains code for training our family of models with your own da
 - `./train/train.py`: training script to train or fine-tune the ViNT model on your custom data.
 - `./train/vint_train/models/`: contains model files for GNM, ViNT, and some baselines.
 - `./train/process_*.py`: scripts to process rosbags or other formats of robot trajectories into training data.
-- `./deployment/src/record_bag.sh`: script to collect a demo trajectory as a ROS bag in the target environment on the robot. This trajectory is subsampled to generate a topological graph of the environment.
-- `./deployment/src/create_topomap.sh`: script to convert a ROS bag of a demo trajectory into a topological graph that the robot can use to navigate.
-- `./deployment/src/navigate.sh`: script that deploys a trained GNM/ViNT/NoMaD model on the robot to navigate to a desired goal in the generated topological graph. Please see relevant sections below for configuration settings.
-- `./deployment/src/explore.sh`: script that deploys a trained NoMaD model on the robot to randomly explore its environment. Please see relevant sections below for configuration settings.
+- `./deployment/launch/create_topomap.launch.py`: script to convert a ROS bag of a demo trajectory into a topological graph that the robot can use to navigate.
+- `./deployment/launch/navigation.launch.py`: script that deploys a trained GNM/ViNT/NoMaD model on the robot to navigate to a desired goal in the generated topological graph. Please see relevant sections below for configuration settings.
+- `./deployment/launch/explore.launch.py`: script that deploys a trained NoMaD model on the robot to randomly explore its environment. Please see relevant sections below for configuration settings.
 
 ## Train
 
@@ -65,7 +64,7 @@ We recommend you to download these (and any other datasets you may want to train
 #### Data Processing 
 
 We provide some sample scripts to process these datasets, either directly from a rosbag or from a custom format like HDF5s:
-1. Run `process_bags.py` with the relevant args, or `process_recon.py` for processing RECON HDF5s. You can also manually add your own dataset by following our structure below (if you are adding a custom dataset, please checkout the [Custom Datasets](#custom-datasets) section).
+1. Run `process_bags_ros2.py` with the relevant args, or `process_recon.py` for processing RECON HDF5s. You can also manually add your own dataset by following our structure below (if you are adding a custom dataset, please checkout the [Custom Datasets](#custom-datasets) section).
 2. Run `data_split.py` on your dataset folder with the relevant args.
 
 After step 1 of data processing, the processed dataset should have the following structure:
@@ -200,9 +199,11 @@ ros2 bag record # followed by the topics to be recorded for training such as odo
 ```
 
 #### Make the topological map: 
-```bash
-ros2 launch visualnav_transformer create_topomap.launch.py
-```
+1. `ros2 launch visualnav_transformer create_topomap.launch.py`: This launch file opens the navigate and pd_controller node.
+2. `ros2 run gopro_interface gopro`: This will run the gopro interface.
+or
+3. `ros2 launch zed_wrapper zed_camera.launch.py camera_model:=zedx camera_name=zedx` This will run zedx interface.
+be sure to change the topics in topics.yaml present in the params folder.
 
 ### Running the model 
 #### Navigation
