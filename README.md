@@ -150,30 +150,24 @@ This subfolder contains code to load a pre-trained ViNT and deploy it on the ope
 
 ### LoCoBot Setup
 
-This software was tested on a LoCoBot running Ubuntu 20.04.
+This software was tested on a LoCoBot running Ubuntu 20.04 and docker running ubuntu 22.04.
 
 
 #### Software Installation (in this order)
-1. ROS: [ros-noetic](https://wiki.ros.org/noetic/Installation/Ubuntu)
+1. ROS: [ros-humble](https://docs.ros.org/en/humble/Installation.html)
 2. ROS packages: 
     ```bash
-    sudo apt-get install ros-noetic-usb-cam ros-noetic-joy
+    sudo apt-get install ros-humble-usb-cam ros-humble-joy
     ```
-3. [kobuki](http://wiki.ros.org/kobuki/Tutorials/Installation)
-4. Conda 
-    - Install anaconda/miniconda/etc. for managing environments
-    - Make conda env with environment.yml (run this inside the `vint_release/` directory)
-        ```bash
-        conda env create -f deployment/deployment_environment.yml
-        ```
-    - Source env 
-        ```bash
-        conda activate vint_deployment
-        ```
-    - (Recommended) add to `~/.bashrc`: 
-        ```bash
-        echo “conda activate vint_deployment” >> ~/.bashrc 
-        ```
+3. Create a Workspace
+   ```bash
+   mkdir -p gnm_ws/src
+   cd gnm_ws/src
+   git clone -b humble-dev git@github.com:NavIQLabs/visualnav-transformer.git
+   ```
+4. Install python dependencies
+   ```bash
+   pip install -r visualnav-transformer/requirements.txt
 5. Install the `vint_train` packages (run this inside the `vint_release/` directory):
     ```bash
     pip install -e train/
@@ -183,14 +177,11 @@ This software was tested on a LoCoBot running Ubuntu 20.04.
     git clone git@github.com:real-stanford/diffusion_policy.git
     pip install -e diffusion_policy/
     ```
-7. (Recommended) Install [tmux](https://github.com/tmux/tmux/wiki/Installing) if not present.
-    Many of the bash scripts rely on tmux to launch multiple screens with different commands. This will be useful for debugging because you can see the output of each screen.
-
-#### Hardware Requirements
-- LoCoBot: http://locobot.org (just the navigation stack)
-- A wide-angle RGB camera: [Example](https://www.amazon.com/ELP-170degree-Fisheye-640x480-Resolution/dp/B00VTHD17W). The `vint_locobot.launch` file uses camera parameters that work with cameras like the ELP fisheye wide angle, feel free to modify to your own. Adjust the camera parameters in `vint_release/deployment/config/camera.yaml` your camera accordingly (used for visualization).
-- [Joystick](https://www.amazon.com/Logitech-Wireless-Nano-Receiver-Controller-Vibration/dp/B0041RR0TW)/[keyboard teleop](http://wiki.ros.org/teleop_twist_keyboard) that works with Linux. Add the index mapping for the _deadman_switch_ on the joystick to the `vint_release/deployment/config/joystick.yaml`. You can find the mapping from buttons to indices for common joysticks in the [wiki](https://wiki.ros.org/joy). 
-
+7. Build the packages
+   ```bash
+   cd ~/gnm_ws
+   colcon build --symlink-install
+   ```
 
 ### Loading the model weights
 
@@ -203,38 +194,23 @@ _Make sure to run these scripts inside the `vint_release/deployment/src/` direct
 
 This section discusses a simple way to create a topological map of the target environment for deployment. For simplicity, we will use the robot in “path-following” mode, i.e. given a single trajectory in an environment, the task is to follow the same trajectory to the goal. The environment may have new/dynamic obstacles, lighting variations etc.
 
-#### Record the rosbag: 
+#### Record the ros2 bag: 
 ```bash
-./record_bag.sh <bag_name>
+ros2 bag record # followed by the topics to be recorded for training such as odom and images.
 ```
-
-Run this command to teleoperate the robot with the joystick and camera. This command opens up three windows 
-1. `roslaunch vint_locobot.launch`: This launch file opens the `usb_cam` node for the camera, the joy node for the joystick, and nodes for the robot’s mobile base.
-2. `python joy_teleop.py`: This python script starts a node that reads inputs from the joy topic and outputs them on topics that teleoperate the robot’s base.
-3. `rosbag record /usb_cam/image_raw -o <bag_name>`: This command isn’t run immediately (you have to click Enter). It will be run in the vint_release/deployment/topomaps/bags directory, where we recommend you store your rosbags.
-
-Once you are ready to record the bag, run the `rosbag record` script and teleoperate the robot on the map you want the robot to follow. When you are finished with recording the path, kill the `rosbag record` command, and then kill the tmux session.
 
 #### Make the topological map: 
 ```bash
-./create_topomap.sh <topomap_name> <bag_filename>
+ros2 launch visualnav_transformer create_topomap.launch.py
 ```
-
-This command opens up 3 windows:
-1. `roscore`
-2. `python create_topomap.py —dt 1 —dir <topomap_dir>`: This command creates a directory in `/vint_release/deployment/topomaps/images` and saves an image as a node in the map every second the bag is played.
-3. `rosbag play -r 1.5 <bag_filename>`: This command plays the rosbag at x5 speed, so the python script is actually recording nodes 1.5 seconds apart. The `<bag_filename>` should be the entire bag name with the .bag extension. You can change this value in the `make_topomap.sh` file. The command does not run until you hit Enter, which you should only do once the python script gives its waiting message. Once you play the bag, move to the screen where the python script is running so you can kill it when the rosbag stops playing.
-
-When the bag stops playing, kill the tmux session.
-
 
 ### Running the model 
 #### Navigation
-_Make sure to run this script inside the `vint_release/deployment/src/` directory._
-
-```bash
-./navigate.sh “--model <model_name> --dir <topomap_dir>”
-```
+1. `ros2 launch visualnav_transformer navigation.launch.py`: This launch file opens the navigate and pd_controller node.
+2. `ros2 run gopro_interface gopro`: This will run the gopro interface.
+or
+3. `ros2 launch zed_wrapper zed_camera.launch.py camera_model:=zedx camera_name=zedx` This will run zedx interface.
+be sure to change the topics in topics.yaml present in the params folder.
 
 To deploy one of the models from the published results, we are releasing model checkpoints that you can download from [this link](https://drive.google.com/drive/folders/1a9yWR2iooXFAqjQHetz263--4_2FFggg?usp=sharing).
 
@@ -248,21 +224,14 @@ Make sure these configurations match what you used to train the model. The confi
 
 The `<topomap_dir>` is the name of the directory in `vint_release/deployment/topomaps/images` that has the images corresponding to the nodes in the topological map. The images are ordered by name from 0 to N.
 
-This command opens up 4 windows:
-
-1. `roslaunch vint_locobot.launch`: This launch file opens the usb_cam node for the camera, the joy node for the joystick, and several nodes for the robot’s mobile base).
-2. `python navigate.py --model <model_name> -—dir <topomap_dir>`: This python script starts a node that reads in image observations from the `/usb_cam/image_raw` topic, inputs the observations and the map into the model, and publishes actions to the `/waypoint` topic.
-3. `python joy_teleop.py`: This python script starts a node that reads inputs from the joy topic and outputs them on topics that teleoperate the robot’s base.
-4. `python pd_controller.py`: This python script starts a node that reads messages from the `/waypoint` topic (waypoints from the model) and outputs velocities to navigate the robot’s base.
-
-When the robot is finishing navigating, kill the `pd_controller.py` script, and then kill the tmux session. If you want to take control of the robot while it is navigating, the `joy_teleop.py` script allows you to do so with the joystick.
-
 #### Exploration
 _Make sure to run this script inside the `vint_release/deployment/src/` directory._
 
-```bash
-./exploration.sh “--model <model_name>”
-```
+1. `ros2 launch visualnav_transformer explore.launch.py`: This launch file opens the navigate and pd_controller node.
+2. `ros2 run gopro_interface gopro`: This will run the gopro interface.
+or
+3. `ros2 launch zed_wrapper zed_camera.launch.py camera_model:=zedx camera_name=zedx` This will run zedx interface.
+be sure to change the topics in topics.yaml present in the params folder.
 
 To deploy one of the models from the published results, we are releasing model checkpoints that you can download from [this link](https://drive.google.com/drive/folders/1a9yWR2iooXFAqjQHetz263--4_2FFggg?usp=sharing).
 
@@ -273,18 +242,6 @@ The `<model_name>` is the name of the model in the `vint_release/deployment/conf
 
 
 Make sure these configurations match what you used to train the model. The configurations for the models we provided the weights for are provided in yaml file for your reference.
-
-The `<topomap_dir>` is the name of the directory in `vint_release/deployment/topomaps/images` that has the images corresponding to the nodes in the topological map. The images are ordered by name from 0 to N.
-
-This command opens up 4 windows:
-
-1. `roslaunch vint_locobot.launch`: This launch file opens the usb_cam node for the camera, the joy node for the joystick, and several nodes for the robot’s mobile base.
-2. `python explore.py --model <model_name>`: This python script starts a node that reads in image observations from the `/usb_cam/image_raw` topic, inputs the observations and the map into the model, and publishes exploration actions to the `/waypoint` topic.
-3. `python joy_teleop.py`: This python script starts a node that reads inputs from the joy topic and outputs them on topics that teleoperate the robot’s base.
-4. `python pd_controller.py`: This python script starts a node that reads messages from the `/waypoint` topic (waypoints from the model) and outputs velocities to navigate the robot’s base.
-
-When the robot is finishing navigating, kill the `pd_controller.py` script, and then kill the tmux session. If you want to take control of the robot while it is navigating, the `joy_teleop.py` script allows you to do so with the joystick.
-
 
 ### Adapting this code to different robots
 
